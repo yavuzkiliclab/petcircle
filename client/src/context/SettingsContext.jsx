@@ -6,8 +6,8 @@ const STORAGE_KEY = 'petcircle_settings';
 
 function getDefaultLanguage() {
   try {
-    const browser = navigator.language || navigator.userLanguage || 'en';
-    return browser.startsWith('tr') ? 'tr' : 'en';
+    const browserLang = navigator.language || navigator.userLanguage || 'en';
+    return browserLang.startsWith('tr') ? 'tr' : 'en';
   } catch {
     return 'en';
   }
@@ -15,7 +15,7 @@ function getDefaultLanguage() {
 
 const defaults = {
   theme: 'light',
-  language: getDefaultLanguage(),
+  language: 'en',
   petFilter: 'all',
   compact: false,
 };
@@ -416,13 +416,13 @@ export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      // Only restore language if user explicitly saved it before
-      if (stored && stored._languageSetByUser) {
+      if (stored && stored.language) {
+        // User has a saved language preference — respect it
         return { ...defaults, ...stored };
       }
-      // Otherwise keep auto-detected language but restore other prefs
-      return { ...defaults, ...stored, language: defaults.language };
-    } catch { return defaults; }
+      // No saved preference — detect from browser (tr→Turkish, else→English)
+      return { ...defaults, ...stored, language: getDefaultLanguage() };
+    } catch { return { ...defaults, language: getDefaultLanguage() }; }
   });
 
   useEffect(() => {
@@ -433,7 +433,6 @@ export function SettingsProvider({ children }) {
   const updateSetting = useCallback((key, value) => {
     setSettings(prev => {
       const next = { ...prev, [key]: value };
-      if (key === 'language') next._languageSetByUser = true;
       localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       return next;
     });
