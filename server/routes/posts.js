@@ -57,7 +57,7 @@ router.get('/explore', authMiddleware, (req, res) => {
 
 // Trending hashtags
 router.get('/trending-tags', authMiddleware, (req, res) => {
-  const captions = db.prepare('SELECT caption FROM posts WHERE caption IS NOT NULL AND caption != "" ORDER BY created_at DESC LIMIT 500').all();
+  const captions = db.prepare("SELECT caption FROM posts WHERE caption IS NOT NULL AND caption != '' ORDER BY created_at DESC LIMIT 500").all();
   const counts = {};
   for (const row of captions) {
     const matches = (row.caption || '').match(/#[\wÀ-ɏЀ-ӿ]+/g) || [];
