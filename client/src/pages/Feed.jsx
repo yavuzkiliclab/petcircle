@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useSettings } from '../context/SettingsContext';
@@ -28,6 +28,10 @@ export default function Feed() {
   const [nearby, setNearby] = useState([]);
   const [storyGroups, setStoryGroups] = useState([]);
   const [storyViewerIdx, setStoryViewerIdx] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [pullY, setPullY] = useState(0);
+  const touchStartY = useRef(-1);
+  const PTR_THRESHOLD = 70;
 
   useEffect(() => { fetchFeed(1, true); }, [petFilter]);
   useEffect(() => {
@@ -60,6 +64,31 @@ export default function Feed() {
 
   const handleDelete = (id) => setPosts(p => p.filter(post => post.id !== id));
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([
+      fetchFeed(1, true),
+      api.get('/stories/feed').then(r => setStoryGroups(r.data)).catch(() => {}),
+      fetchSuggestions(),
+    ]);
+    setRefreshing(false);
+  }, [petFilter]);
+
+  const onTouchStart = (e) => {
+    touchStartY.current = window.scrollY === 0 ? e.touches[0].clientY : -1;
+  };
+  const onTouchMove = (e) => {
+    if (touchStartY.current < 0 || refreshing) return;
+    const delta = e.touches[0].clientY - touchStartY.current;
+    if (delta > 0) setPullY(Math.min(delta * 0.45, 90));
+    else if (pullY > 0) setPullY(0);
+  };
+  const onTouchEnd = async () => {
+    if (pullY >= PTR_THRESHOLD) { setPullY(0); handleRefresh(); }
+    else setPullY(0);
+    touchStartY.current = -1;
+  };
+
   // Interleave "you might like" cards into the post list
   const buildFeedItems = () => {
     const items = [];
@@ -90,7 +119,34 @@ export default function Feed() {
         />
       )}
       <div className="page-container-left" />
-      <div className="feed-posts">
+      <div
+        className="feed-posts"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{ transform: pullY > 0 ? `translateY(${pullY}px)` : undefined, transition: pullY === 0 ? 'transform 0.25s ease' : 'none' }}
+      >
+        {/* Pull-to-refresh indicator */}
+        {(pullY > 0 || refreshing) && (
+          <div className="ptr-indicator">
+            {refreshing
+              ? <div className="spinner" style={{ width: 22, height: 22, borderWidth: 2 }} />
+              : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--pink)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: pullY >= PTR_THRESHOLD ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}><polyline points="7 10 12 15 17 10" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+            }
+            <span className="ptr-label">{refreshing ? 'Yenileniyor...' : pullY >= PTR_THRESHOLD ? 'Bırak, yenile!' : 'Yenilemek için çek'}</span>
+          </div>
+        )}
+
+        {/* Desktop refresh button */}
+        <div className="feed-top-bar">
+          <button className="ptr-refresh-btn" onClick={handleRefresh} disabled={refreshing} title="Yenile">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: refreshing ? 'rotate(360deg)' : 'none', transition: refreshing ? 'transform 0.7s linear' : 'none' }}>
+              <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+          </button>
+        </div>
+
         <StoriesRow groups={storyGroups} onOpenViewer={setStoryViewerIdx} />
         <FilterBar value={petFilter} onChange={v => setPetFilter(v)} />
 
